@@ -1,10 +1,8 @@
 package com.github.fbascheper.messaging.domain;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.fbascheper.messaging.config.KafkaConfiguration;
+import com.github.fbascheper.messaging.common.JacksonMapping;
 import org.junit.jupiter.api.Test;
 
-import java.io.IOException;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 
@@ -28,19 +26,18 @@ class TrafficEventTest {
 
     String serializedTrafficEvent = "{\"timeRegistration\":\"2021-09-15T23:48:20Z\",\"sensorId\":2500,\"sensorDescriptiveId\":\"description\",\"sensorAvailable\":true,\"sensorDataRecent\":true,\"sensorLastTimeOfDataUpdate\":\"2021-10-15T23:48:20Z\",\"vehicleClass\":\"CAR\",\"vehicleCount\":25,\"vehicleAverageSpeed\":50,\"vehicleHarmonicSpeed\":52}";
 
-    ObjectMapper objectMapper = new KafkaConfiguration(null).getObjectMapper();
-
+    JacksonMapping jacksonMapping = new JacksonMapping();
 
     @Test
-    void serializeTrafficEvent() throws IOException {
-        var serializedEvent = objectMapper.writeValueAsString(trafficEvent);
+    void serializeTrafficEvent() {
+        var serializedEvent = jacksonMapping.toJson(trafficEvent);
 
         assertThat(serializedEvent, is(serializedTrafficEvent));
     }
 
     @Test
-    void deserializeTrafficEvent() throws IOException {
-        TrafficEvent deserializedEvent = objectMapper.readValue(serializedTrafficEvent, TrafficEvent.class);
+    void deserializeTrafficEvent() {
+        TrafficEvent deserializedEvent = jacksonMapping.fromJson(serializedTrafficEvent, TrafficEvent.class);
 
         assertThat(deserializedEvent, is(trafficEvent));
     }
