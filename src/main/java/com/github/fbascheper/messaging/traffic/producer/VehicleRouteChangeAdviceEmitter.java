@@ -1,11 +1,14 @@
 package com.github.fbascheper.messaging.traffic.producer;
 
+import com.github.fbascheper.messaging.common.JacksonMapping;
 import com.github.fbascheper.messaging.domain.VehicleRouteChangeAdvice;
 import com.github.fbascheper.messaging.domain.VehicleRouteTrafficHotspots;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.stereotype.Component;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.reactive.messaging.kafka.Record;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
 
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import java.util.stream.Collectors;
 
@@ -15,37 +18,32 @@ import java.util.stream.Collectors;
  * @author Frederieke Scheper
  * @since 07-11-2021
  */
-@Component
+@ApplicationScoped
 public class VehicleRouteChangeAdviceEmitter {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final String vehicleRouteChangeAdviceTopicName;
+    private final JacksonMapping jacksonMapping;
 
     @Inject
-    VehicleRouteChangeAdviceEmitter(
-            KafkaTemplate<String, Object> kafkaTemplate
-            , @Value("${traffic.kafka.vehicle-route-change-advice-topic}") String vehicleRouteChangeAdviceTopicName
-    ) {
-        this.kafkaTemplate = kafkaTemplate;
-        this.vehicleRouteChangeAdviceTopicName = vehicleRouteChangeAdviceTopicName;
+    VehicleRouteChangeAdviceEmitter(JacksonMapping jacksonMapping) {
+        this.jacksonMapping = jacksonMapping;
     }
 
     /**
      * Create the route change advice, if applicable,and send it to Kafka.
      *
-     * @param vehicleRouteTrafficHotspots
+     * @param vehicleRouteTrafficHotspots the traffic hotspots along the route
+     * @return the route change advice produced to the Kafka topic
      */
-    public void sendRouteChangeAdvice(VehicleRouteTrafficHotspots vehicleRouteTrafficHotspots) {
+    @Incoming("vehicle-route-traffic-hotspots")
+    @Outgoing("vehicle-route-change-advice-kafka-pdr")
+    public Multi<Record<String, String>> sendRouteChangeAdvice(Multi<VehicleRouteTrafficHotspots> vehicleRouteTrafficHotspots) {
 
-        if (this.isRouteChangeAdvisable(vehicleRouteTrafficHotspots)) {
+        return vehicleRouteTrafficHotspots
+                .filter(this::isRouteChangeAdvisable)
+                .map(this::routeChangeAdvice)
+                .map(advice -> Record.of(advice.vehicleId(), jacksonMapping.toJson(advice)))
+                ;
 
-            var vehicleRouteChangeAdvice = routeChangeAdvice(vehicleRouteTrafficHotspots);
-
-            kafkaTemplate.send(vehicleRouteChangeAdviceTopicName
-                    , vehicleRouteChangeAdvice.vehicleId()
-                    , vehicleRouteChangeAdvice
-            );
-        }
     }
 
     /**
