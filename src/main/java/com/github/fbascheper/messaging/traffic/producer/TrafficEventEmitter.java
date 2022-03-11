@@ -1,14 +1,15 @@
 package com.github.fbascheper.messaging.traffic.producer;
 
+import com.github.fbascheper.messaging.common.JacksonMapping;
 import com.github.fbascheper.messaging.data.retriever.TrafficDataRetriever;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.reactive.messaging.kafka.Record;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.slf4j.Logger;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import java.time.Duration;
 
 import static org.slf4j.LoggerFactory.getLogger;
 
@@ -19,37 +20,33 @@ import static org.slf4j.LoggerFactory.getLogger;
  * @author Frederieke Scheper
  * @since 20-10-2021
  */
-@Component
-@EnableScheduling
+@ApplicationScoped
 public class TrafficEventEmitter {
 
     private static final Logger LOGGER = getLogger(TrafficEventEmitter.class);
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final String trafficEventsTopicName;
     private final TrafficDataRetriever trafficDataRetriever;
+    private final JacksonMapping jacksonMapping;
 
     @Inject
     TrafficEventEmitter(
-            KafkaTemplate<String, Object> kafkaTemplate
-            , @Value("${traffic.kafka.traffic-event-topic}") String trafficEventsTopicName
-            , TrafficDataRetriever trafficDataRetriever
+            TrafficDataRetriever trafficDataRetriever
+            , JacksonMapping jacksonMapping
     ) {
-        this.kafkaTemplate = kafkaTemplate;
-        this.trafficEventsTopicName = trafficEventsTopicName;
         this.trafficDataRetriever = trafficDataRetriever;
+        this.jacksonMapping = jacksonMapping;
     }
 
-    // TODO: reset traffic event update frequency to one every minute
-    // @Scheduled(fixedRate = 60_000L)
-    @Scheduled(fixedRate = 300_000L)
-    public void sendTrafficEvents() {
-        var trafficEvents = this.trafficDataRetriever.getTrafficEvents();
-        trafficEvents.forEach(event ->
-                kafkaTemplate.send(trafficEventsTopicName
-                        , event.sensorId().toString()
-                        , event
-                ));
+    @Outgoing("traffic-event-kafka-pdr")
+    public Multi<Record<String, String>> sendTrafficEvents() {
+
+        // TODO: reset traffic event update frequency to one every minute
+        // var ticks = Multi.createFrom().ticks().every(Duration.ofMinutes(1));
+
+        var ticks = Multi.createFrom().ticks().every(Duration.ofMinutes(5));
+        var events = ticks.onItem().transformToMultiAndConcatenate(tick ->
+                Multi.createFrom().items(this.trafficDataRetriever.getTrafficEvents().stream()));
+        return events.map(event -> Record.of(event.sensorId().toString(), jacksonMapping.toJson(event)));
     }
 
 }

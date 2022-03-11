@@ -1,25 +1,25 @@
 package com.github.fbascheper.messaging.traffic.producer;
 
+import com.github.fbascheper.messaging.common.JacksonMapping;
 import com.github.fbascheper.messaging.data.retriever.SensorDataRetriever;
 import com.github.fbascheper.messaging.domain.GeographicCoordinates;
 import com.github.fbascheper.messaging.domain.TrafficSensor;
 import com.github.fbascheper.messaging.domain.VehicleClass;
 import com.github.fbascheper.messaging.domain.VehicleRouteChangeEvent;
+import io.smallrye.mutiny.Multi;
+import io.smallrye.reactive.messaging.kafka.Record;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.slf4j.Logger;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.TreeSet;
 import java.util.concurrent.ThreadLocalRandom;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static org.slf4j.LoggerFactory.getLogger;
@@ -30,8 +30,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * @author Frederieke Scheper
  * @since 03-11-2021
  */
-@Component
-@EnableScheduling
+@ApplicationScoped
 public class VehicleRouteChangeEventEmitter {
 
     private static final Logger LOGGER = getLogger(VehicleRouteChangeEventEmitter.class);
@@ -40,26 +39,20 @@ public class VehicleRouteChangeEventEmitter {
     private static final VehicleRouteChangeEvent MOVING_VEHICLE_2_TEMPLATE = new VehicleRouteChangeEvent("LIC-ENSE-PLATE-2", VehicleClass.MINIVAN, new ArrayList<>());
     private static final VehicleRouteChangeEvent MOVING_VEHICLE_3_TEMPLATE = new VehicleRouteChangeEvent("LIC-ENSE-PLATE-3", VehicleClass.CAR, new ArrayList<>());
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
-    private final String vehicleRouteChangeEventsTopicName;
     private final SensorDataRetriever sensorDataRetriever;
-
-    private final AtomicLong tick = new AtomicLong();
+    private final JacksonMapping jacksonMapping;
 
     private final List<Integer> potentialHotspotIds;
     private final List<Integer> fastTrafficSensorIds;
 
     @Inject
     VehicleRouteChangeEventEmitter(
-            KafkaTemplate<String, Object> kafkaTemplate
-            , @Value("${traffic.kafka.vehicle-route-change-event-topic}") String vehicleRouteChangeEventsTopicName
-            , SensorDataRetriever sensorDataRetriever
+            SensorDataRetriever sensorDataRetriever
+            , JacksonMapping jacksonMapping
     ) {
 
-        this.kafkaTemplate = kafkaTemplate;
-        this.vehicleRouteChangeEventsTopicName = vehicleRouteChangeEventsTopicName;
-
         this.sensorDataRetriever = sensorDataRetriever;
+        this.jacksonMapping = jacksonMapping;
 
         this.potentialHotspotIds = new TreeSet<>( // remove duplicates and sort
                 Arrays.asList(459, 460, 466, 467, 468, 474, 475, 476, 491, 496, 497, 498, 502, 548, 549, 550, 597, 645, 646, 647, 662, 663, 664, 665, 666, 667, 673, 675, 693, 716, 747, 748, 749, 753, 754, 755, 759, 894, 895, 896, 897, 926, 928, 929, 987, 994, 1023, 1056, 1057, 1108, 1148, 1174, 1231, 1232, 1233, 1234, 1235, 1236, 1237, 1238, 1251, 1252, 1253, 1254, 1255, 1256, 1260, 1261, 1262, 1273, 1291, 1298, 1369, 1376, 1377, 1389, 1395, 1396, 1399, 1400, 1410, 1417, 1419, 1423, 1449, 1463, 1471, 1472, 1474, 1481, 1525, 1529, 1530, 1606, 1645, 1750, 1751, 1756, 1757, 1758, 1774, 1779, 1780, 1782, 1783, 1784, 1790, 1791, 1802, 1803, 1804, 1809, 1811, 1818, 1826, 1864, 1866, 1873, 1896, 1897, 1898, 1908, 1909, 1910, 1923, 1929, 2000, 2012, 2055, 2061, 2063, 2064, 2069, 2086, 2087, 2101, 2121, 2123, 2186, 2223, 2225, 2231, 2251, 2252, 2253, 2254, 2255, 2256, 2259, 2261, 2262, 2263, 2264, 2265, 2266, 2268, 2269, 2270, 2271, 2272, 2273, 2274, 2275, 2276, 2277, 2281, 2282, 2283, 2285, 2286, 2288, 2289, 2340, 2341, 2414, 2417, 2444, 2446, 2562, 2580, 2582, 2607, 2612, 2614, 2615, 2616, 2619, 2629, 2634, 2635, 2656, 2687, 2690, 2807, 2808, 2867, 2868, 2884, 2929, 2956, 2989, 3013, 3018, 3019, 3025, 3038, 3048, 3085, 3088, 3089, 3091, 3092, 3096, 3097, 3098, 3114, 3115, 3116, 3120, 3121, 3131, 3132, 3146, 3147, 3176, 3177, 3178, 3179, 3181, 3183, 3186, 3187, 3248, 3249, 3250, 3257, 3258, 3259, 3263, 3269, 3270, 3271, 3281, 3282, 3283, 3337, 3338, 3339, 3398, 3399, 3400, 3402, 3403, 3404, 3410, 3411, 3412, 3418, 3419, 3434, 3435, 3497, 3697, 3698, 3700, 3701, 3702, 3715, 3716, 3718, 3721, 3729, 3735, 3747, 3748, 3749, 3750, 3751, 3752, 3753, 3754, 3755, 3756, 3757, 3758, 3759, 3760, 3761, 3788, 3819, 3820, 3821, 3822, 3828, 3830, 3831, 3832, 3843, 3844, 3847, 3848, 3850, 3851, 3852, 3853, 3857, 3858, 3859, 3860, 3882, 3883, 3884, 3885, 3887, 3889, 3891, 3892, 3893, 3894, 3895, 3896, 3897, 3898, 3899, 3900, 3901, 3902, 3903, 3910, 3911, 3912, 3913, 3916, 3917, 3918, 3920, 3921, 3925, 3968, 3969, 3970, 3976, 3984, 3985, 3987, 3992, 3993, 3995, 4000, 4001, 4004, 4045, 4087, 4088, 4090, 4095, 4096, 4131, 4132, 4138, 4148, 4149, 4195, 4196, 4199, 4200, 4201, 4202, 4203, 4244, 4245, 4253, 4312, 4313, 4314, 4357, 4364, 4454, 4500, 4501, 4536, 4542, 4543, 4547, 4548, 4552, 4559, 4564, 4566, 4567, 4568, 4569, 4571, 4582, 4583, 4591, 4598, 4600, 4603, 4605, 4612, 4613, 4618, 4620, 4621, 4625, 4626, 4629, 4634)
@@ -76,17 +69,12 @@ public class VehicleRouteChangeEventEmitter {
         buildVehicleTemplateRoutesWithHotspots();
     }
 
-    @Scheduled(fixedRate = 30_000L)
-    public void sendRouteChangeEvents() {
-        var vehicleRouteChangeEvents = movingVehicles(tick.getAndIncrement());
-
-        vehicleRouteChangeEvents.forEach(event ->
-                kafkaTemplate.send(
-                        vehicleRouteChangeEventsTopicName
-                        , event.vehicleId()
-                        , event
-                ));
-
+    @Outgoing("vehicle-route-change-event-kafka-pdr")
+    public Multi<Record<String, String>> sendRouteChangeEvents() {
+        var ticks = Multi.createFrom().ticks().every(Duration.ofSeconds(30));
+        var events = ticks.onItem().transformToMultiAndConcatenate(tick ->
+                Multi.createFrom().items(movingVehicles(tick).stream()));
+        return events.map(event -> Record.of(event.vehicleId(), jacksonMapping.toJson(event)));
     }
 
     private List<VehicleRouteChangeEvent> movingVehicles(long tick) {
