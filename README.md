@@ -1,4 +1,4 @@
-# Sample traffic pipeline (Spring-Kafka version)
+# Meetup-GN traffic pipeline (Quarkus version)
 
 ### Startup Docker containers
 
