@@ -1,12 +1,12 @@
 package com.github.fbascheper.messaging.traffic.processor;
 
+import com.github.fbascheper.messaging.common.JacksonMapping;
 import com.github.fbascheper.messaging.domain.TrafficEvent;
-import com.github.fbascheper.messaging.traffic.component.TrafficEventHotspotStore;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.stereotype.Component;
+import io.smallrye.mutiny.Multi;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
 
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 
 /**
@@ -15,42 +15,38 @@ import javax.inject.Inject;
  * @author Frederieke Scheper
  * @since 06-11-2021
  */
-@Component
+@ApplicationScoped
 public class TrafficEventHotspotFilter {
 
-    private final TrafficEventHotspotStore trafficEventHotspotStore;
+    private final JacksonMapping jacksonMapping;
 
     @Inject
-    public TrafficEventHotspotFilter(TrafficEventHotspotStore trafficEventHotspotStore) {
-        this.trafficEventHotspotStore = trafficEventHotspotStore;
+    public TrafficEventHotspotFilter(JacksonMapping jacksonMapping) {
+        this.jacksonMapping = jacksonMapping;
     }
 
-    @KafkaListener(topics = "${traffic.kafka.traffic-event-topic}"
-            , clientIdPrefix = "trafficEventJson"
-            , groupId = "cgRouteAdvice"
-            , containerFactory = "kafkaListenerContainerFactory")
-    public void listenAsObject(
-            ConsumerRecord<String, TrafficEvent> consumerRecord
-            , @Payload TrafficEvent event
-    ) {
+    @Incoming("traffic-event-kafka-csr")
+    @Outgoing("traffic-event-hotspot")
+    public Multi<TrafficEvent> consume(Multi<String> trafficEventJson) {
+        return trafficEventJson
+                .map(str -> jacksonMapping.fromJson(str, TrafficEvent.class))
 
-        if (event.sensorAvailable() // keep only the events from available sensors
+                // keep only the events from available sensors
+                .filter(TrafficEvent::sensorAvailable)
 
                 // keep only the events from reliable vehicle classes (i.e. discard motorcycles)
-                && event.vehicleClass().isReliable()
+                .filter(event -> event.vehicleClass().isReliable())
 
                 // keep only the events with traffic
-                && event.vehicleCount() != 0
-                && event.vehiclesCountedInVehicleClass()
+                .filter(event -> event.vehicleCount() != 0
+                        && event.vehiclesCountedInVehicleClass())
 
                 // keep only the events with speed measurements within defined range
-                && !event.speedMeasurementOutsideRange()
+                .filter(event -> !event.speedMeasurementOutsideRange())
 
                 // keep only the events with a low harmonic speed (congestions)
-                && event.vehicleHarmonicSpeed() < 50
-        ) {
-            trafficEventHotspotStore.store(event);
-        }
+                .filter(event -> event.vehicleHarmonicSpeed() < 50)
+                ;
     }
 
 }

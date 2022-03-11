@@ -1,18 +1,17 @@
 package com.github.fbascheper.messaging.traffic.processor;
 
+import com.github.fbascheper.messaging.common.JacksonMapping;
 import com.github.fbascheper.messaging.data.retriever.SensorDataRetriever;
 import com.github.fbascheper.messaging.domain.GeographicCoordinates;
 import com.github.fbascheper.messaging.domain.TrafficSensor;
 import com.github.fbascheper.messaging.domain.VehicleRouteChangeEvent;
 import com.github.fbascheper.messaging.domain.VehicleRouteTrafficSensors;
-import com.github.fbascheper.messaging.traffic.component.VehicleRouteTrafficSensorsProcessor;
-import com.github.fbascheper.messaging.traffic.producer.VehicleRouteChangeAdviceEmitter;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
+import io.smallrye.mutiny.Multi;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.slf4j.Logger;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.messaging.handler.annotation.Payload;
-import org.springframework.stereotype.Component;
 
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import java.util.Collections;
 import java.util.stream.Collectors;
@@ -25,14 +24,17 @@ import static org.slf4j.LoggerFactory.getLogger;
  * @author Frederieke Scheper
  * @since 06-11-2021
  */
-@Component
+@ApplicationScoped
 public class VehicleRouteChangeEventProcessor {
 
     private static final Logger LOGGER = getLogger(VehicleRouteChangeEventProcessor.class);
 
     private final SensorDataRetriever sensorDataRetriever;
-    private final VehicleRouteTrafficSensorsProcessor vehicleRouteTrafficSensorsProcessor;
-    private final VehicleRouteChangeAdviceEmitter vehicleRouteChangeAdviceEmitter;
+    private final JacksonMapping jacksonMapping;
+
+    @Inject
+    @Channel("vehicle-route-change-event-kafka-csr")
+    Multi<String> vehicleRouteChangeEventJson;
 
     /**
      * All incoming "vehicle route change events" from Kafka, as JSON
@@ -40,29 +42,21 @@ public class VehicleRouteChangeEventProcessor {
     @Inject
     VehicleRouteChangeEventProcessor(
             SensorDataRetriever sensorDataRetriever
-            , VehicleRouteTrafficSensorsProcessor vehicleRouteTrafficSensorsProcessor
-            , VehicleRouteChangeAdviceEmitter vehicleRouteChangeAdviceEmitter
+            , JacksonMapping jacksonMapping
     ) {
         this.sensorDataRetriever = sensorDataRetriever;
-        this.vehicleRouteTrafficSensorsProcessor = vehicleRouteTrafficSensorsProcessor;
-        this.vehicleRouteChangeAdviceEmitter = vehicleRouteChangeAdviceEmitter;
+        this.jacksonMapping = jacksonMapping;
     }
-    
+
     /**
      * Handle the incoming {@link VehicleRouteChangeEvent}, potentially leading to "vehicle route change advice".
      */
-    @KafkaListener(topics = "${traffic.kafka.vehicle-route-change-event-topic}"
-            , clientIdPrefix = "routeChangeEventJson"
-            , groupId = "cgRouteAdvice"
-            , containerFactory = "kafkaListenerContainerFactory")
-    public void listenAsObject(
-            ConsumerRecord<String, VehicleRouteChangeEvent> consumerRecord
-            , @Payload VehicleRouteChangeEvent event
-    ) {
-
-        var vehicleRouteTrafficSensors = this.vehicleRouteTrafficSensors(event);
-        var vehicleRouteHotspots = vehicleRouteTrafficSensorsProcessor.vehicleRouteHotspots(vehicleRouteTrafficSensors);
-        vehicleRouteChangeAdviceEmitter.sendRouteChangeAdvice(vehicleRouteHotspots);
+    @Outgoing("vehicle-route-traffic-sensors")
+    public Multi<VehicleRouteTrafficSensors> process() {
+        return vehicleRouteChangeEventJson
+                .map(str -> jacksonMapping.fromJson(str, VehicleRouteChangeEvent.class))
+                .map(this::vehicleRouteTrafficSensors)
+                ;
     }
 
     /**
