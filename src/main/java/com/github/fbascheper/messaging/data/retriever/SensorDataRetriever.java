@@ -3,11 +3,12 @@ package com.github.fbascheper.messaging.data.retriever;
 import com.github.fbascheper.messaging.common.SensorDataConverter;
 import com.github.fbascheper.messaging.domain.TrafficSensor;
 import com.github.fbascheper.miv.config.JaxbTMivconfig;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
 import javax.annotation.PostConstruct;
+import javax.enterprise.context.ApplicationScoped;
+import javax.inject.Inject;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
@@ -31,7 +32,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * @author Frederieke Scheper
  * @since 03-11-2021
  */
-@Component
+@ApplicationScoped
 public class SensorDataRetriever {
 
     private static final Logger LOGGER = getLogger(SensorDataRetriever.class);
@@ -42,7 +43,8 @@ public class SensorDataRetriever {
 
     private List<TrafficSensor> trafficSensors;
 
-    public SensorDataRetriever(@Value("${traffic.flemish.sensor-config-url}") String sensorConfigDataUrl) {
+    @Inject
+    public SensorDataRetriever(@ConfigProperty(name = "traffic.flemish.sensor-config-url") String sensorConfigDataUrl) {
         Objects.requireNonNull(sensorConfigDataUrl);
         this.sensorConfigDataUrl = sensorConfigDataUrl;
 

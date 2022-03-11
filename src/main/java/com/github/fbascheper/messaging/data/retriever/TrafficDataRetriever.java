@@ -3,10 +3,11 @@ package com.github.fbascheper.messaging.data.retriever;
 import com.github.fbascheper.messaging.common.TrafficDataConverter;
 import com.github.fbascheper.messaging.domain.TrafficEvent;
 import com.github.fbascheper.miv.data.JaxbMivType;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.slf4j.Logger;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Component;
 
+import javax.enterprise.context.ApplicationScoped;
+import javax.inject.Inject;
 import javax.xml.bind.JAXBContext;
 import javax.xml.bind.JAXBElement;
 import javax.xml.bind.JAXBException;
@@ -28,7 +29,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * @author Frederieke Scheper
  * @since 15-10-2021
  */
-@Component
+@ApplicationScoped
 public class TrafficDataRetriever {
 
     private static final Logger LOGGER = getLogger(TrafficDataRetriever.class);
@@ -37,7 +38,8 @@ public class TrafficDataRetriever {
     private final HttpClient httpClient;
     private final JAXBContext jaxbContext;
 
-    public TrafficDataRetriever(@Value("${traffic.flemish.data-url}") String trafficDataUrl) {
+    @Inject
+    public TrafficDataRetriever(@ConfigProperty(name = "traffic.flemish.data-url") String trafficDataUrl) {
         Objects.requireNonNull(trafficDataUrl);
 
         this.flemishTrafficDataUrl = trafficDataUrl;
