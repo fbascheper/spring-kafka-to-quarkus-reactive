@@ -1,9 +1,12 @@
-package com.github.fbascheper.messaging.traffic.component;
+package com.github.fbascheper.messaging.traffic.processor;
 
 import com.github.fbascheper.messaging.domain.*;
+import io.smallrye.mutiny.Multi;
+import org.eclipse.microprofile.reactive.messaging.Channel;
+import org.eclipse.microprofile.reactive.messaging.Outgoing;
 import org.slf4j.Logger;
-import org.springframework.stereotype.Component;
 
+import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import java.util.Collections;
 
@@ -15,7 +18,7 @@ import static org.slf4j.LoggerFactory.getLogger;
  * @author Frederieke Scheper
  * @since 27-10-2021
  */
-@Component
+@ApplicationScoped
 public class VehicleRouteTrafficSensorsProcessor {
 
     private static final Logger LOGGER = getLogger(VehicleRouteTrafficSensorsProcessor.class);
@@ -23,8 +26,18 @@ public class VehicleRouteTrafficSensorsProcessor {
     private final TrafficEventHotspotStore hotspotStore;
 
     @Inject
+    @Channel("vehicle-route-traffic-sensors")
+    Multi<VehicleRouteTrafficSensors> vehicleRouteTrafficSensors;
+
+    @Inject
     public VehicleRouteTrafficSensorsProcessor(TrafficEventHotspotStore hotspotStore) {
         this.hotspotStore = hotspotStore;
+    }
+
+    @Outgoing("vehicle-route-traffic-hotspots")
+    public Multi<VehicleRouteTrafficHotspots> process() {
+        return vehicleRouteTrafficSensors
+                .map(this::vehicleRouteHotspots);
     }
 
     /**
@@ -33,7 +46,7 @@ public class VehicleRouteTrafficSensorsProcessor {
      * @param vehicleRouteTrafficSensors a vehicle's route, containing the traffic sensors underway
      * @return the traffic hotspots
      */
-    public VehicleRouteTrafficHotspots vehicleRouteHotspots(VehicleRouteTrafficSensors vehicleRouteTrafficSensors) {
+    private VehicleRouteTrafficHotspots vehicleRouteHotspots(VehicleRouteTrafficSensors vehicleRouteTrafficSensors) {
         var trafficHotspotsOnRoute = vehicleRouteTrafficSensors
                 .sensorsOnRoute().stream()
                 .map(this::hotspotEventOrUnknown)

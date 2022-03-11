@@ -1,10 +1,11 @@
-package com.github.fbascheper.messaging.traffic.component;
+package com.github.fbascheper.messaging.traffic.processor;
 
 import com.github.fbascheper.messaging.domain.TrafficEvent;
 import com.github.fbascheper.messaging.domain.VehicleClass;
+import org.eclipse.microprofile.reactive.messaging.Incoming;
 import org.slf4j.Logger;
-import org.springframework.stereotype.Component;
 
+import javax.enterprise.context.ApplicationScoped;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -16,13 +17,14 @@ import static org.slf4j.LoggerFactory.getLogger;
  * @author Frederieke Scheper
  * @since 07-11-2021
  */
-@Component
+@ApplicationScoped
 public class TrafficEventHotspotStore {
 
     private static final Logger LOGGER = getLogger(TrafficEventHotspotStore.class);
 
     private final ConcurrentMap<Integer, ConcurrentMap<VehicleClass, TrafficEvent>> trafficEventHotspots = new ConcurrentHashMap<>();
 
+    @Incoming("traffic-event-hotspot")
     public void store(TrafficEvent trafficEvent) {
 
         LOGGER.trace("Storing hotspot event = {}", trafficEvent);
